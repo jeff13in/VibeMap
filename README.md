@@ -36,7 +36,6 @@ The project is built using **Python, SQL, and machine learning**, following a **
 ## Quick Start
 
 ### 1. Clone & Setup Environment
-```bash
 git clone <your-repo-url>
 cd vibemap
 python -m venv venv
@@ -45,22 +44,19 @@ venv\Scripts\activate         # Windows
 pip install -r requirements.txt
 
 ### 2. Run Full Pipeline
-```bash
 python run_pipeline.py
 
 ### 3. Run CLI Application
-```bash
 python -m src.cli_app
 
 ### 4. Run Streamlit Web App 
-```bash
 streamlit run src/streamlit_app.py
 
 ### 5.Testing
 Run all unit tests: pytest -v
 Run tests with coverage: pytest --cov=src --cov-report=term-missing
 
-### Core Modules
+## Core Modules
 
 Data Generation: data_generator.py
 Generates realistic Spotify-like song data and stores it in CSV and SQLite.
