@@ -6,6 +6,10 @@ Purpose:
 - Perform a complete EDA run end-to-end
 - Generate basic statistics and core visualizations
 
+SCRUM-94:
+- Define mood quadrants using valence (positivity) and energy (intensity)
+- Save a mood space plot
+
 Run:
     python exploratory_analysis.py
 """
@@ -33,7 +37,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class SpotifyEDA:
-    """Basic EDA pipeline for SCRUM-85"""
+    """Basic EDA pipeline for SCRUM-85 + SCRUM-94"""
 
     def __init__(self, data_path: Path):
         self.df = pd.read_csv(data_path)
@@ -98,6 +102,83 @@ class SpotifyEDA:
 
         print(f"Saved feature distributions → {out}")
 
+    # ✅ ADD THIS METHOD (SCRUM-94)
+    def mood_quadrants(self):
+        """
+        SCRUM-94: Create mood quadrants using valence and energy.
+
+        Quadrants:
+          - Happy & Energetic (valence >= 0.5, energy >= 0.5)
+          - Happy & Calm      (valence >= 0.5, energy <  0.5)
+          - Sad & Energetic   (valence <  0.5, energy >= 0.5)
+          - Sad & Calm        (valence <  0.5, energy <  0.5)
+
+        Saves plot to: notebooks/figures/mood_space.png
+        """
+        print("\n=== MOOD QUADRANTS (SCRUM-94) ===")
+
+        # Ensure required columns exist
+        required_cols = {"valence", "energy"}
+        missing = required_cols - set(self.df.columns)
+        if missing:
+            raise ValueError(f"Missing required columns for mood quadrants: {sorted(missing)}")
+
+        # Create mood_quadrant column
+        self.df["mood_quadrant"] = "Unknown"
+
+        self.df.loc[
+            (self.df["valence"] >= 0.5) & (self.df["energy"] >= 0.5),
+            "mood_quadrant",
+        ] = "Happy & Energetic"
+
+        self.df.loc[
+            (self.df["valence"] >= 0.5) & (self.df["energy"] < 0.5),
+            "mood_quadrant",
+        ] = "Happy & Calm"
+
+        self.df.loc[
+            (self.df["valence"] < 0.5) & (self.df["energy"] >= 0.5),
+            "mood_quadrant",
+        ] = "Sad & Energetic"
+
+        self.df.loc[
+            (self.df["valence"] < 0.5) & (self.df["energy"] < 0.5),
+            "mood_quadrant",
+        ] = "Sad & Calm"
+
+        # Print counts + percentages
+        counts = self.df["mood_quadrant"].value_counts()
+        total = len(self.df)
+
+        print("\nSongs by Mood Quadrant:")
+        for label, count in counts.items():
+            print(f"  {label}: {count} ({count / total * 100:.1f}%)")
+
+        # Plot mood space scatter
+        plt.figure(figsize=(12, 8))
+        sns.scatterplot(
+            data=self.df,
+            x="valence",
+            y="energy",
+            hue="mood_quadrant",
+            alpha=0.7,
+        )
+
+        # Quadrant lines
+        plt.axvline(0.5, color="gray", linestyle="--", linewidth=1)
+        plt.axhline(0.5, color="gray", linestyle="--", linewidth=1)
+
+        plt.title("Song Distribution in Mood Space (Valence vs Energy)", fontweight="bold")
+        plt.xlabel("Valence (Positivity)")
+        plt.ylabel("Energy (Intensity)")
+        plt.tight_layout()
+
+        out = OUTPUT_DIR / "mood_space.png"
+        plt.savefig(out, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        print(f"\n✅ Saved mood space plot → {out}")
+
     def run(self):
         """Run complete EDA"""
         print("\n🎵 RUNNING EXPLORATORY DATA ANALYSIS")
@@ -107,7 +188,10 @@ class SpotifyEDA:
         self.correlation_analysis()
         self.feature_distributions()
 
-        print("\n✅ SCRUM-85 COMPLETE: EDA ran end-to-end")
+        # ✅ ADD THIS CALL (SCRUM-94)
+        self.mood_quadrants()
+
+        print("\n✅ SCRUM-85 + SCRUM-94 COMPLETE")
 
 
 def main():
