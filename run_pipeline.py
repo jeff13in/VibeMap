@@ -148,6 +148,8 @@ def main() -> None:
         pipeline_scripts.append("exploratory_analysis.py")
 
     pipeline_scripts.append("clustering.py")
+    # raise RuntimeError("Intentional failure for pipeline testing")
+
     pipeline_scripts.append("recommender.py")
 
     _banner("🚀 VibeMap Master Pipeline")
@@ -174,4 +176,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print("\n" + "=" * 60)
+        print("❌ PIPELINE FAILED")
+        print("=" * 60)
+        print(f"Error: {type(e).__name__}: {e}")
+        print("\nTip: Scroll up to see which step failed (▶ START / ❌ FAIL).")
+        sys.exit(1)
