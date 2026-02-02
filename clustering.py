@@ -14,11 +14,15 @@ from pathlib import Path
 import joblib
 
 # Configuration
-DATA_DIR = Path(__file__).parent.parent / 'data'
-MODEL_DIR = Path(__file__).parent.parent / 'models'
-OUTPUT_DIR = Path(__file__).parent.parent / 'notebooks' / 'figures'
-MODEL_DIR.mkdir(exist_ok=True)
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+DATA_DIR = PROJECT_ROOT              # where cleaned_spotify_data.csv currently is
+MODEL_DIR = PROJECT_ROOT / "models"
+OUTPUT_DIR = PROJECT_ROOT / "notebooks" / "figures"
+
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 
 class MoodClusterer:
