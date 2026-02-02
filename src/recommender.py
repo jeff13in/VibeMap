@@ -278,8 +278,8 @@ def main():
     rec.build_knn_model(n_neighbors=10)
 
     # Demo: all 4 recommendation modes
-    print("\n--- recommend_by_mood('sad') ---")
-    print(rec.recommend_by_mood('sad', n_songs=5)[
+    print("\n--- recommend_by_mood('party') ---")
+    print(rec.recommend_by_mood('party', n_songs=5)[
         ['track_name', 'valence', 'energy']
     ].to_string())
 
