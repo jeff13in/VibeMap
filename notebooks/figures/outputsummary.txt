@@ -1,0 +1,20 @@
+============================================================
+📦 OUTPUT SUMMARY (SCRUM-43)
+============================================================
+✅ Cleaned dataset: cleaned_spotify_data.csv (205KB)  →  C:\Users\rifat\OneDrive\Documents\GitHub\VibeMap\cleaned_spotify_data.csv
+✅ Raw dataset (csv): songs_with_audio_features.csv (214KB)  →  C:\Users\rifat\OneDrive\Documents\GitHub\VibeMap\songs_with_audio_features.csv
+✅ SQLite database: spotify_data.db (1MB)  →  C:\Users\rifat\OneDrive\Documents\GitHub\VibeMap\spotify_data.db
+✅ Models folder: 2 file(s)  →  C:\Users\rifat\OneDrive\Documents\GitHub\VibeMap\models
+✅ Figures folder: 8 file(s)  →  C:\Users\rifat\OneDrive\Documents\GitHub\VibeMap\notebooks\figures
+
+Model artifacts:
+  - mood_clusterer.pkl (5KB)
+  - song_recommender.pkl (68KB)
+
+Figure artifacts:
+  - cluster_optimization.png (257KB)
+  - cluster_visualization.png (2MB)
+  - correlation_heatmap.png (347KB)
+  - feature_distributions.png (616KB)
+  - mood_space.png (771KB)
+  - tempo_categories.png (193KB)
