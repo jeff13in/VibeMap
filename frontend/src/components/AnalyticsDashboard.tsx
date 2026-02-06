@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FC } from 'react';
 import * as echarts from 'echarts';
 
@@ -30,6 +30,27 @@ function safeNum(x: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function quantile(sorted: number[], q: number) {
+  if (!sorted.length) return null;
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  if (sorted[base + 1] !== undefined) {
+    return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+  }
+  return sorted[base];
+}
+
+function iqrBounds(values: number[]) {
+  if (values.length < 4) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const q1 = quantile(sorted, 0.25);
+  const q3 = quantile(sorted, 0.75);
+  if (q1 === null || q3 === null) return null;
+  const iqr = q3 - q1;
+  return { low: q1 - 1.5 * iqr, high: q3 + 1.5 * iqr };
+}
+
 function buildTempoBins(tempos: number[], binSize = 10) {
   const bins = new Map<number, number>();
   for (const t of tempos) {
@@ -44,6 +65,10 @@ function buildTempoBins(tempos: number[], binSize = 10) {
 }
 
 const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<'tempo' | 'energy' | 'valence' | ''>('');
+  const [outliersOnly, setOutliersOnly] = useState(false);
+
   // Normalize once to avoid NaN/strings breaking charts
   const normalized = useMemo(() => {
     return (songs || []).map((s) => ({
@@ -74,6 +99,54 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       avgValence: round2(statAvg(valences)),
     };
   }, [normalized]);
+
+  const tableRows = useMemo(() => {
+    let list = normalized;
+    const query = search.trim().toLowerCase();
+    if (query) {
+      list = list.filter((s) => {
+        const track = (s.track_name ?? '').toLowerCase();
+        const artist = (s.artist_name ?? '').toLowerCase();
+        return track.includes(query) || artist.includes(query);
+      });
+    }
+
+    if (outliersOnly) {
+      const tempos = list.map((s) => s.tempo).filter((x): x is number => x !== null);
+      const energies = list.map((s) => s.energy).filter((x): x is number => x !== null);
+      const valences = list.map((s) => s.valence).filter((x): x is number => x !== null);
+      const tempoBounds = iqrBounds(tempos);
+      const energyBounds = iqrBounds(energies);
+      const valenceBounds = iqrBounds(valences);
+
+      list = list.filter((s) => {
+        const t = s.tempo;
+        const e = s.energy;
+        const v = s.valence;
+        const tempoOutlier =
+          tempoBounds && t !== null && (t < tempoBounds.low || t > tempoBounds.high);
+        const energyOutlier =
+          energyBounds && e !== null && (e < energyBounds.low || e > energyBounds.high);
+        const valenceOutlier =
+          valenceBounds && v !== null && (v < valenceBounds.low || v > valenceBounds.high);
+        return tempoOutlier || energyOutlier || valenceOutlier;
+      });
+    }
+
+    if (sortBy) {
+      list = [...list].sort((a, b) => {
+        const av = a[sortBy];
+        const bv = b[sortBy];
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        if (av === bv) return 0;
+        return av > bv ? -1 : 1;
+      });
+    }
+
+    return list;
+  }, [normalized, outliersOnly, search, sortBy]);
 
   // DOM refs
   const tempoRef = useRef<HTMLDivElement | null>(null);
@@ -132,11 +205,11 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
         series: [{ type: 'bar', data: counts }],
         grid: { left: 40, right: 20, top: 60, bottom: 60 },
       },
-      { notMerge: true, lazyUpdate: false }
+      { notMerge: true }
     );
   }, [normalized]);
 
-  // Valence vs Energy scatter update + quadrant counts overlay
+  // Valence vs Energy scatter update
   useEffect(() => {
     const chart = moodChartRef.current;
     if (!chart) return;
@@ -151,23 +224,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       })
       .filter(Boolean) as Array<{ value: [number, number]; name: string }>;
 
-    // ✅ IMPORTANT: Count QUADRANTS based on the same points you're plotting
-    let calmDark = 0;
-    let calmPositive = 0;
-    let energeticDark = 0;
-    let energeticPositive = 0;
-
-    for (const p of points) {
-      const v = p.value[0];
-      const e = p.value[1];
-
-      if (v < 0.5 && e < 0.5) calmDark++;
-      else if (v >= 0.5 && e < 0.5) calmPositive++;
-      else if (v < 0.5 && e >= 0.5) energeticDark++;
-      else energeticPositive++;
-    }
-
-    chart.setOption(
+      chart.setOption(
       {
         title: { text: 'Mood Space (Valence vs Energy)' },
         tooltip: {
@@ -197,28 +254,41 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
         grid: { left: 60, right: 20, top: 70, bottom: 60 },
 
         series: [
-          // 1) Main scatter + quadrants
           {
             name: 'Songs',
             type: 'scatter',
             data: points,
             symbolSize: 10,
 
+            // 1) Quadrant shading
             markArea: {
               silent: true,
-              itemStyle: { opacity: 0.10 },
+              itemStyle: { opacity: 0.08 },
               data: [
-                // Calm + Dark
-                [{ xAxis: 0, yAxis: 0, itemStyle: { color: '#ffffff' } }, { xAxis: 0.5, yAxis: 0.5 }],
-                // Calm + Positive
-                [{ xAxis: 0.5, yAxis: 0, itemStyle: { color: '#1DB954' } }, { xAxis: 1, yAxis: 0.5 }],
-                // Energetic + Dark
-                [{ xAxis: 0, yAxis: 0.5, itemStyle: { color: '#7c3aed' } }, { xAxis: 0.5, yAxis: 1 }],
-                // Energetic + Positive
-                [{ xAxis: 0.5, yAxis: 0.5, itemStyle: { color: '#1DB954' } }, { xAxis: 1, yAxis: 1 }],
+                // Calm + Dark (low valence, low energy)
+                [
+                  { xAxis: 0, yAxis: 0, itemStyle: { color: '#ffffff' } },
+                  { xAxis: 0.5, yAxis: 0.5 },
+                ],
+                // Calm + Positive (high valence, low energy)
+                [
+                  { xAxis: 0.5, yAxis: 0, itemStyle: { color: '#1DB954' } },
+                  { xAxis: 1, yAxis: 0.5 },
+                ],
+                // Energetic + Dark (low valence, high energy)
+                [
+                  { xAxis: 0, yAxis: 0.5, itemStyle: { color: '#7c3aed' } },
+                  { xAxis: 0.5, yAxis: 1 },
+                ],
+                // Energetic + Positive (high valence, high energy)
+                [
+                  { xAxis: 0.5, yAxis: 0.5, itemStyle: { color: '#1DB954' } },
+                  { xAxis: 1, yAxis: 1 },
+                ],
               ],
             },
 
+            // 2) Quadrant divider lines
             markLine: {
               silent: true,
               symbol: ['none', 'none'],
@@ -227,37 +297,32 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
             },
           },
 
-          // 2) Labels + counts overlay (text-only scatter)
+          // 3) Labels overlay (as a text-only scatter)
           {
             type: 'scatter',
             data: [
-              { value: [0.25, 0.88], label: `Energetic + Dark (${energeticDark})` },
-              { value: [0.75, 0.88], label: `Energetic + Positive (${energeticPositive})` },
-              { value: [0.25, 0.12], label: `Calm + Dark (${calmDark})` },
-              { value: [0.75, 0.12], label: `Calm + Positive (${calmPositive})` },
+              { value: [0.25, 0.85], label: 'Energetic + Dark' },
+              { value: [0.75, 0.85], label: 'Energetic + Positive' },
+              { value: [0.25, 0.15], label: 'Calm + Dark' },
+              { value: [0.75, 0.15], label: 'Calm + Positive' },
             ],
             symbolSize: 1,
             itemStyle: { opacity: 0 },
             label: {
               show: true,
               formatter: (p: any) => p.data.label,
-              color: 'rgba(255,255,255,0.78)',
-              fontSize: 12,
-              fontWeight: 800,
-              backgroundColor: 'rgba(0,0,0,0.25)',
-              padding: [4, 8],
-              borderRadius: 8,
+              color: 'rgba(255,255,255,0.65)',
+              fontSize: 11,
+              fontWeight: 600,
             },
             tooltip: { show: false },
-
-            // ✅ FIX #1: ensure overlay renders on top
-            z: 10,
+            z: 1,
           },
         ],
       },
-      // ✅ FIX #2: force redraw so labels update reliably
-      { notMerge: true, lazyUpdate: false }
+      { notMerge: true }
     );
+
   }, [normalized]);
 
   // Top artists update
@@ -288,9 +353,78 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
         series: [{ type: 'bar', data: values }],
         grid: { left: 140, right: 20, top: 60, bottom: 30 },
       },
-      { notMerge: true, lazyUpdate: false }
+      { notMerge: true }
     );
   }, [normalized]);
+  const distInsights = useMemo(() => {
+    const n = normalized.length;
+    if (!n) {
+      return {
+        tempoDominant: '—',
+        tempoDominantPct: 0,
+        highEnergyPct: 0,
+        positiveValencePct: 0,
+        topArtist: '—',
+        topArtistPct: 0,
+        diversityLabel: '—',
+      };
+    }
+
+    // Tempo buckets
+    const tempos = normalized.map((s) => s.tempo).filter((x): x is number => x !== null);
+    const slow = tempos.filter((t) => t < 90).length;
+    const mid = tempos.filter((t) => t >= 90 && t < 120).length;
+    const fast = tempos.filter((t) => t >= 120).length;
+
+    const tempoBucket = [
+      { label: 'Slow (<90 BPM)', count: slow },
+      { label: 'Mid (90–119 BPM)', count: mid },
+      { label: 'Fast (≥120 BPM)', count: fast },
+    ].sort((a, b) => b.count - a.count)[0];
+
+    const tempoDominant = tempoBucket.label;
+    const tempoDominantPct = tempos.length ? Math.round((tempoBucket.count / tempos.length) * 100) : 0;
+
+    // Energy / Valence distribution
+    const energies = normalized.map((s) => s.energy).filter((x): x is number => x !== null);
+    const valences = normalized.map((s) => s.valence).filter((x): x is number => x !== null);
+
+    const highEnergyPct = energies.length
+      ? Math.round((energies.filter((e) => e >= 0.7).length / energies.length) * 100)
+      : 0;
+
+    const positiveValencePct = valences.length
+      ? Math.round((valences.filter((v) => v >= 0.6).length / valences.length) * 100)
+      : 0;
+
+    // Top artist concentration
+    const counts = new Map<string, number>();
+    for (const s of normalized) {
+      const a = (s.artist_name ?? '').trim();
+      if (!a) continue;
+      counts.set(a, (counts.get(a) || 0) + 1);
+    }
+
+    const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
+    const topArtist = top?.[0] ?? '—';
+    const topArtistPct = top ? Math.round((top[1] / n) * 100) : 0;
+
+    // Diversity label (simple, readable)
+    const unique = stats.uniqueArtists;
+    const ratio = n ? unique / n : 0;
+    const diversityLabel =
+      ratio >= 0.6 ? 'High' : ratio >= 0.35 ? 'Medium' : 'Low';
+
+    return {
+      tempoDominant,
+      tempoDominantPct,
+      highEnergyPct,
+      positiveValencePct,
+      topArtist,
+      topArtistPct,
+      diversityLabel,
+    };
+  }, [normalized, stats.uniqueArtists]);
 
   // helpers for Tempo Range KPI
   const tempoRange = useMemo(() => {
@@ -303,7 +437,42 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
 
   return (
     <div className="grid gap-4">
-      {/* KPI GRID */}
+      {/* =========================
+          HEADER
+      ========================== */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-spotify-green" />
+            <h2 className="text-xl font-semibold">Live Analytics</h2>
+          </div>
+          <p className="text-sm text-text-secondary">
+            Updates every time you generate recommendations
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-dark-highlight bg-dark-elevated px-3 py-1 text-xs text-text-secondary">
+            Songs: {stats.count}
+          </span>
+          <span className="rounded-full border border-dark-highlight bg-dark-elevated px-3 py-1 text-xs text-text-secondary">
+            Artists: {stats.uniqueArtists}
+          </span>
+
+          <div className="w-px self-stretch bg-dark-highlight mx-1 hidden sm:block" />
+
+          <button className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition">
+            Export PNG
+          </button>
+          <button className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition">
+            Download CSV
+          </button>
+        </div>
+      </div>
+
+      {/* =========================
+          KPI GRID
+      ========================== */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <KPI title="Songs Returned" value={stats.count} />
         <KPI title="Unique Artists" value={stats.uniqueArtists} />
@@ -316,8 +485,81 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
         <KPI title="Avg Energy" value={stats.avgEnergy ?? '—'} />
         <KPI title="Avg Valence" value={stats.avgValence ?? '—'} />
       </div>
+            {/* =========================
+          DISTRIBUTION INSIGHTS
+      ========================== */}
+      <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">Distribution Insights</h3>
+            <p className="text-xs text-text-secondary">
+              Quick breakdown of this recommendation set
+            </p>
+          </div>
 
-      {/* CHART GRID */}
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-dark-highlight bg-black/20 px-3 py-1 text-xs text-text-secondary">
+              Diversity: <span className="text-white">{distInsights.diversityLabel}</span>
+            </span>
+            <span className="rounded-full border border-dark-highlight bg-black/20 px-3 py-1 text-xs text-text-secondary">
+              Top artist share: <span className="text-white">{distInsights.topArtistPct}%</span>
+            </span>
+            <span className="rounded-full border border-dark-highlight bg-black/20 px-3 py-1 text-xs text-text-secondary">
+              High-energy: <span className="text-white">{distInsights.highEnergyPct}%</span>
+            </span>
+            <span className="rounded-full border border-dark-highlight bg-black/20 px-3 py-1 text-xs text-text-secondary">
+              Positive mood: <span className="text-white">{distInsights.positiveValencePct}%</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <div className="rounded-xl border border-dark-highlight bg-black/20 p-3 text-sm text-text-secondary">
+            • Dominant tempo bucket: <span className="text-white">{distInsights.tempoDominant}</span>{' '}
+            <span className="text-white">({distInsights.tempoDominantPct}%)</span>
+          </div>
+
+          <div className="rounded-xl border border-dark-highlight bg-black/20 p-3 text-sm text-text-secondary">
+            • Most frequent artist: <span className="text-white">{distInsights.topArtist}</span>{' '}
+            <span className="text-white">({distInsights.topArtistPct}% of results)</span>
+          </div>
+        </div>
+      </div>
+
+
+      {/* =========================
+          INSIGHT SUMMARY
+      ========================== */}
+      <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">Recommendation Profile</h3>
+            <p className="text-xs text-text-secondary">
+              Quick summary based on current recommendation set
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-spotify-green/10 border border-spotify-green/20 px-3 py-1 text-xs text-spotify-green">
+              {Number(stats.avgEnergy) >= 0.7 ? 'High Energy' : 'Balanced Energy'}
+            </span>
+            <span className="rounded-full bg-spotify-green/10 border border-spotify-green/20 px-3 py-1 text-xs text-spotify-green">
+              {Number(stats.avgValence) >= 0.6 ? 'Positive Mood' : 'Neutral Mood'}
+            </span>
+            <span className="rounded-full bg-spotify-green/10 border border-spotify-green/20 px-3 py-1 text-xs text-spotify-green">
+              {Number(stats.avgTempo) >= 120
+                ? 'Fast Leaning'
+                : Number(stats.avgTempo) >= 90
+                ? 'Mid Tempo'
+                : 'Slow Leaning'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* =========================
+          CHART GRID
+      ========================== */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
           <div className="flex items-center justify-between mb-2">
@@ -347,6 +589,107 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
         </div>
         <div className="h-[320px]">
           <div ref={artistRef} className="h-full w-full" />
+        </div>
+      </div>
+
+      {/* =========================
+          EXPLAINABILITY
+      ========================== */}
+      <details className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+        <summary className="cursor-pointer list-none flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">Why these songs?</h3>
+            <p className="text-xs text-text-secondary">
+              Explainability notes (simple but powerful)
+            </p>
+          </div>
+          <span className="text-xs text-text-secondary">Toggle</span>
+        </summary>
+
+        <div className="mt-4 grid gap-2 text-sm text-text-secondary">
+          <div className="rounded-xl border border-dark-highlight p-3">
+            • Songs are selected because they are close in{' '}
+            <span className="text-white">mood space</span> (valence + energy).
+          </div>
+          <div className="rounded-xl border border-dark-highlight p-3">
+            • Tempo is constrained around a similar range to keep the vibe consistent.
+          </div>
+          <div className="rounded-xl border border-dark-highlight p-3">
+            • Artist diversity helps avoid repeating the same creator too often.
+          </div>
+        </div>
+      </details>
+
+      {/* =========================
+          TABLE PREVIEW
+      ========================== */}
+      <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
+          <h3 className="text-sm font-semibold">Result Preview</h3>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="h-9 w-52 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm outline-none focus:border-spotify-green"
+              placeholder="Search track/artist..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm outline-none focus:border-spotify-green"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'tempo' | 'energy' | 'valence' | '')}
+            >
+              <option value="">Sort by</option>
+              <option value="tempo">Tempo</option>
+              <option value="energy">Energy</option>
+              <option value="valence">Valence</option>
+            </select>
+            <button
+              className={`h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm transition ${
+                outliersOnly ? 'border-spotify-green text-spotify-green' : 'hover:border-spotify-green'
+              }`}
+              onClick={() => setOutliersOnly((prev) => !prev)}
+            >
+              Outliers
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                {['track_name', 'artist_name', 'tempo', 'valence', 'energy'].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left p-2 border-b border-dark-highlight text-xs text-text-secondary uppercase tracking-wide"
+                  >
+                    {h.replace('_', ' ')}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {tableRows.slice(0, 20).map((s, i) => (
+                <tr key={s.track_id ?? `${s.track_name}-${s.artist_name}-${i}`}>
+                  <td className="p-2 border-b border-dark-highlight">{s.track_name}</td>
+                  <td className="p-2 border-b border-dark-highlight">{s.artist_name}</td>
+                  <td className="p-2 border-b border-dark-highlight">{s.tempo ?? '—'}</td>
+                  <td className="p-2 border-b border-dark-highlight">{s.valence ?? '—'}</td>
+                  <td className="p-2 border-b border-dark-highlight">{s.energy ?? '—'}</td>
+                </tr>
+              ))}
+
+              {tableRows.length === 0 && (
+                <tr>
+                  <td className="p-2 text-text-secondary" colSpan={5}>
+                    No data yet — generate recommendations to populate analytics.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
