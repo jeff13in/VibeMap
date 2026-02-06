@@ -264,6 +264,30 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportPreview = () => {
+    const rows = tableRows;
+    const headers = ['track_name', 'artist_name', 'tempo', 'valence', 'energy'];
+    const lines = [
+      headers.join(','),
+      ...rows.map((r) =>
+        headers
+          .map((h) => {
+            const value = (r as Record<string, string | number | null | undefined>)[h];
+            const safe = value === null || value === undefined ? '' : String(value);
+            return `"${safe.replace(/\"/g, '""')}"`;
+          })
+          .join(',')
+      ),
+    ].join('\n');
+    const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'vibemap-result-preview.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportPng = () => {
     const chart =
       moodChartRef.current ?? tempoChartRef.current ?? artistChartRef.current;
@@ -838,6 +862,12 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
               {sortDir === 'asc' ? 'Asc' : 'Desc'}
             </button>
             <button
+              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-xs text-text-secondary hover:border-spotify-green transition"
+              onClick={handleExportPreview}
+            >
+              Export Preview
+            </button>
+            <button
               className={`h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm transition ${
                 outliersOnly ? 'border-spotify-green text-spotify-green' : 'hover:border-spotify-green'
               }`}
@@ -911,7 +941,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           ))}
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="max-h-[520px] overflow-y-auto overflow-x-auto fancy-scrollbar">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
@@ -939,7 +969,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
             </thead>
 
             <tbody>
-              {tableRows.slice(0, 20).map((s, i) => (
+              {tableRows.map((s, i) => (
                 <tr key={s.track_id ?? `${s.track_name}-${s.artist_name}-${i}`}>
                   <td className="p-2 border-b border-dark-highlight">{s.track_name}</td>
                   <td className="p-2 border-b border-dark-highlight">{s.artist_name}</td>
