@@ -66,8 +66,22 @@ function buildTempoBins(tempos: number[], binSize = 10) {
 
 const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'tempo' | 'energy' | 'valence' | ''>('');
+  const [sortBy, setSortBy] = useState<
+    'tempo' | 'energy' | 'valence' | 'track_name' | 'artist_name' | ''
+  >('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [outliersOnly, setOutliersOnly] = useState(false);
+  const [tempoFilter, setTempoFilter] = useState<'slow' | 'mid' | 'fast' | ''>('');
+  const [moodFilter, setMoodFilter] = useState<'negative' | 'neutral' | 'positive' | ''>('');
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const prevStatsRef = useRef<{
+    count: number;
+    uniqueArtists: number;
+    avgTempo: number | null;
+    avgEnergy: number | null;
+    avgValence: number | null;
+  } | null>(null);
 
   // Normalize once to avoid NaN/strings breaking charts
   const normalized = useMemo(() => {
@@ -100,6 +114,27 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
     };
   }, [normalized]);
 
+  const deltas = useMemo(() => {
+    const prev = prevStatsRef.current;
+    if (!prev) return null;
+    return {
+      count: stats.count - prev.count,
+      uniqueArtists: stats.uniqueArtists - prev.uniqueArtists,
+      avgTempo:
+        stats.avgTempo !== null && prev.avgTempo !== null
+          ? round2(stats.avgTempo - prev.avgTempo)
+          : null,
+      avgEnergy:
+        stats.avgEnergy !== null && prev.avgEnergy !== null
+          ? round2(stats.avgEnergy - prev.avgEnergy)
+          : null,
+      avgValence:
+        stats.avgValence !== null && prev.avgValence !== null
+          ? round2(stats.avgValence - prev.avgValence)
+          : null,
+    };
+  }, [stats]);
+
   const tableRows = useMemo(() => {
     let list = normalized;
     const query = search.trim().toLowerCase();
@@ -108,6 +143,24 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
         const track = (s.track_name ?? '').toLowerCase();
         const artist = (s.artist_name ?? '').toLowerCase();
         return track.includes(query) || artist.includes(query);
+      });
+    }
+
+    if (tempoFilter) {
+      list = list.filter((s) => {
+        if (s.tempo === null) return false;
+        if (tempoFilter == 'slow') return s.tempo < 90;
+        if (tempoFilter == 'mid') return s.tempo >= 90 && s.tempo < 120;
+        return s.tempo >= 120;
+      });
+    }
+
+    if (moodFilter) {
+      list = list.filter((s) => {
+        if (s.valence === null) return false;
+        if (moodFilter == 'negative') return s.valence < 0.4;
+        if (moodFilter == 'neutral') return s.valence >= 0.4 && s.valence < 0.6;
+        return s.valence >= 0.6;
       });
     }
 
@@ -135,18 +188,92 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
 
     if (sortBy) {
       list = [...list].sort((a, b) => {
+        const dir = sortDir === 'asc' ? 1 : -1;
         const av = a[sortBy];
         const bv = b[sortBy];
         if (av === null && bv === null) return 0;
         if (av === null) return 1;
         if (bv === null) return -1;
-        if (av === bv) return 0;
-        return av > bv ? -1 : 1;
+        if (typeof av == 'string' && typeof bv == 'string') {
+          return av.localeCompare(bv) * dir;
+        }
+        if (av == bv) return 0;
+        return av > bv ? -1 * dir : 1 * dir;
       });
     }
 
     return list;
-  }, [normalized, outliersOnly, search, sortBy]);
+  }, [moodFilter, normalized, outliersOnly, search, sortBy, sortDir, tempoFilter]);
+
+  useEffect(() => {
+    prevStatsRef.current = stats;
+  }, [stats]);
+
+  useEffect(() => {
+    setLastUpdated(Date.now());
+  }, [songs]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const updatedLabel = useMemo(() => {
+    if (!lastUpdated) return 'Not updated';
+    const seconds = Math.max(0, Math.floor((now - lastUpdated) / 1000));
+    if (seconds < 30) return 'Updated just now';
+    if (seconds < 60) return `Updated ${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `Updated ${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `Updated ${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `Updated ${days}d ago`;
+  }, [lastUpdated, now]);
+
+  const handleSort = (field: 'tempo' | 'energy' | 'valence' | 'track_name' | 'artist_name') => {
+    if (sortBy === field) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDir('desc');
+    }
+  };
+
+  const handleExportCsv = () => {
+    const rows = tableRows.length ? tableRows : normalized;
+    const headers = ['track_name', 'artist_name', 'tempo', 'valence', 'energy'];
+    const lines = [
+      headers.join(','),
+      ...rows.map((r) =>
+        headers
+          .map((h) => {
+            const value = (r as Record<string, string | number | null | undefined>)[h];
+            const safe = value === null || value === undefined ? '' : String(value);
+            return `"${safe.replace(/"/g, '""')}"`;
+          })
+          .join(',')
+      ),
+    ].join('\n');
+    const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'vibemap-results.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPng = () => {
+    const chart =
+      moodChartRef.current ?? tempoChartRef.current ?? artistChartRef.current;
+    if (!chart) return;
+    const url = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#0b0f16' });
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'vibemap-chart.png';
+    link.click();
+  };
 
   // DOM refs
   const tempoRef = useRef<HTMLDivElement | null>(null);
@@ -458,13 +585,22 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           <span className="rounded-full border border-dark-highlight bg-dark-elevated px-3 py-1 text-xs text-text-secondary">
             Artists: {stats.uniqueArtists}
           </span>
+          <span className="rounded-full border border-dark-highlight bg-dark-elevated px-3 py-1 text-xs text-text-secondary">
+            {updatedLabel}
+          </span>
 
           <div className="w-px self-stretch bg-dark-highlight mx-1 hidden sm:block" />
 
-          <button className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition">
+          <button
+            className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition"
+            onClick={handleExportPng}
+          >
             Export PNG
           </button>
-          <button className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition">
+          <button
+            className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition"
+            onClick={handleExportCsv}
+          >
             Download CSV
           </button>
         </div>
@@ -474,16 +610,16 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           KPI GRID
       ========================== */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-        <KPI title="Songs Returned" value={stats.count} />
-        <KPI title="Unique Artists" value={stats.uniqueArtists} />
-        <KPI title="Avg Tempo" value={stats.avgTempo ?? '—'} suffix=" BPM" />
+        <KPI title="Songs Returned" value={stats.count} delta={deltas?.count ?? null} />
+        <KPI title="Unique Artists" value={stats.uniqueArtists} delta={deltas?.uniqueArtists ?? null} />
+        <KPI title="Avg Tempo" value={stats.avgTempo ?? '--'} suffix=" BPM" delta={deltas?.avgTempo ?? null} />
         <KPI
           title="Tempo Range"
-          value={tempoRange ? `${tempoRange.min} - ${tempoRange.max}` : '—'}
+          value={tempoRange ? `${tempoRange.min} - ${tempoRange.max}` : '--'}
           suffix=" BPM"
         />
-        <KPI title="Avg Energy" value={stats.avgEnergy ?? '—'} />
-        <KPI title="Avg Valence" value={stats.avgValence ?? '—'} />
+        <KPI title="Avg Energy" value={stats.avgEnergy ?? '--'} delta={deltas?.avgEnergy ?? null} />
+        <KPI title="Avg Valence" value={stats.avgValence ?? '--'} delta={deltas?.avgValence ?? null} />
       </div>
             {/* =========================
           DISTRIBUTION INSIGHTS
@@ -637,13 +773,31 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
             <select
               className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm outline-none focus:border-spotify-green"
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'tempo' | 'energy' | 'valence' | '')}
+              onChange={(e) =>
+                setSortBy(
+                  e.target.value as
+                    | 'tempo'
+                    | 'energy'
+                    | 'valence'
+                    | 'track_name'
+                    | 'artist_name'
+                    | ''
+                )
+              }
             >
               <option value="">Sort by</option>
+              <option value="track_name">Track</option>
+              <option value="artist_name">Artist</option>
               <option value="tempo">Tempo</option>
               <option value="energy">Energy</option>
               <option value="valence">Valence</option>
             </select>
+            <button
+              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-xs text-text-secondary hover:border-spotify-green transition"
+              onClick={() => setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+            >
+              {sortDir === 'asc' ? 'Asc' : 'Desc'}
+            </button>
             <button
               className={`h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm transition ${
                 outliersOnly ? 'border-spotify-green text-spotify-green' : 'hover:border-spotify-green'
@@ -652,7 +806,70 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
             >
               Outliers
             </button>
+            <span className="text-xs text-text-secondary" title="Outliers are values outside 1.5x IQR for tempo, energy, or valence.">
+              (i)
+            </span>
+            <button
+              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-xs text-text-secondary hover:border-spotify-green transition"
+              onClick={() => {
+                setSearch('');
+                setSortBy('');
+                setSortDir('desc');
+                setOutliersOnly(false);
+                setTempoFilter('');
+                setMoodFilter('');
+              }}
+            >
+              Reset filters
+            </button>
           </div>
+        </div>
+
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-text-secondary">Tempo:</span>
+          {[
+            { label: 'Slow', value: 'slow' },
+            { label: 'Mid', value: 'mid' },
+            { label: 'Fast', value: 'fast' },
+          ].map((chip) => (
+            <button
+              key={chip.value}
+              className={`rounded-full border px-3 py-1 ${
+                tempoFilter === chip.value
+                  ? 'border-spotify-green text-spotify-green bg-black/30'
+                  : 'border-dark-highlight text-text-secondary bg-black/10'
+              }`}
+              onClick={() =>
+                setTempoFilter((prev) =>
+                  prev === chip.value ? '' : (chip.value as 'slow' | 'mid' | 'fast')
+                )
+              }
+            >
+              {chip.label}
+            </button>
+          ))}
+          <span className="text-text-secondary ml-2">Mood:</span>
+          {[
+            { label: 'Negative', value: 'negative' },
+            { label: 'Neutral', value: 'neutral' },
+            { label: 'Positive', value: 'positive' },
+          ].map((chip) => (
+            <button
+              key={chip.value}
+              className={`rounded-full border px-3 py-1 ${
+                moodFilter === chip.value
+                  ? 'border-spotify-green text-spotify-green bg-black/30'
+                  : 'border-dark-highlight text-text-secondary bg-black/10'
+              }`}
+              onClick={() =>
+                setMoodFilter((prev) =>
+                  prev === chip.value ? '' : (chip.value as 'negative' | 'neutral' | 'positive')
+                )
+              }
+            >
+              {chip.label}
+            </button>
+          ))}
         </div>
 
         <div className="overflow-x-auto">
@@ -662,9 +879,21 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
                 {['track_name', 'artist_name', 'tempo', 'valence', 'energy'].map((h) => (
                   <th
                     key={h}
-                    className="text-left p-2 border-b border-dark-highlight text-xs text-text-secondary uppercase tracking-wide"
+                    className="text-left p-2 border-b border-dark-highlight text-xs text-text-secondary uppercase tracking-wide cursor-pointer select-none"
+                    onClick={() =>
+                      handleSort(
+                        h as 'track_name' | 'artist_name' | 'tempo' | 'valence' | 'energy'
+                      )
+                    }
                   >
-                    {h.replace('_', ' ')}
+                    <span className="flex items-center gap-1">
+                      {h.replace('_', ' ')}
+                      {sortBy === h && (
+                        <span className="text-[10px] text-text-secondary">
+                          {sortDir === 'asc' ? '^' : 'v'}
+                        </span>
+                      )}
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -700,11 +929,20 @@ function KPI({
   title,
   value,
   suffix = '',
+  delta,
 }: {
   title: string;
   value: number | string;
   suffix?: string;
+  delta?: number | null;
 }) {
+  const deltaLabel =
+    delta === null || delta === undefined
+      ? null
+      : delta > 0
+        ? `+${delta}`
+        : String(delta);
+
   return (
     <div className="rounded-xl border border-dark-highlight bg-dark-elevated p-3">
       <div className="text-xs text-text-secondary">{title}</div>
@@ -712,6 +950,11 @@ function KPI({
         {value}
         <span className="text-xs text-text-secondary ml-1">{suffix}</span>
       </div>
+      {deltaLabel && (
+        <div className="mt-1 text-xs text-text-secondary">
+          {delta > 0 ? '^' : delta < 0 ? 'v' : '-'} {deltaLabel}
+        </div>
+      )}
     </div>
   );
 }
