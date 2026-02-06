@@ -1,4 +1,19 @@
+# Python
 /venv
 .venv
 __pycache__/
+*.pyc
+.coverage
+
+# Node
+/frontend/node_modules
+/frontend/dist
+
+# Data files
 spotify_readme.md
+
+# OS
+.DS_Store
+
+# Database
+*.db
