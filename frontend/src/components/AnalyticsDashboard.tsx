@@ -323,12 +323,27 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
     const tempos = normalized.map((s) => s.tempo).filter((x): x is number => x !== null);
     const { labels, counts } = buildTempoBins(tempos, 10);
 
+    const axisText = '#cbd5e1';
+    const axisLine = 'rgba(148,163,184,0.35)';
+    const splitLine = 'rgba(148,163,184,0.25)';
+
     chart.setOption(
       {
-        title: { text: 'Tempo Distribution (BPM)' },
+        title: { text: 'Tempo Distribution (BPM)', textStyle: { color: axisText } },
         tooltip: { trigger: 'axis' },
-        xAxis: { type: 'category', data: labels, axisLabel: { rotate: 35 } },
-        yAxis: { type: 'value' },
+        xAxis: {
+          type: 'category',
+          data: labels,
+          axisLabel: { rotate: 35, color: axisText },
+          axisLine: { lineStyle: { color: axisLine } },
+          axisTick: { lineStyle: { color: axisLine } },
+        },
+        yAxis: {
+          type: 'value',
+          axisLabel: { color: axisText },
+          axisLine: { lineStyle: { color: axisLine } },
+          splitLine: { lineStyle: { color: splitLine } },
+        },
         series: [{ type: 'bar', data: counts }],
         grid: { left: 40, right: 20, top: 60, bottom: 60 },
       },
@@ -351,9 +366,13 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       })
       .filter(Boolean) as Array<{ value: [number, number]; name: string }>;
 
-      chart.setOption(
+    const axisText = '#cbd5e1';
+    const axisLine = 'rgba(148,163,184,0.35)';
+    const splitLine = 'rgba(148,163,184,0.25)';
+
+    chart.setOption(
       {
-        title: { text: 'Mood Space (Valence vs Energy)' },
+        title: { text: 'Mood Space (Valence vs Energy)', textStyle: { color: axisText } },
         tooltip: {
           formatter: (p: any) =>
             `${p.data.name}<br/>Valence: ${p.value[0]}<br/>Energy: ${p.value[1]}`,
@@ -366,7 +385,10 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           name: 'Valence',
           nameLocation: 'middle',
           nameGap: 28,
-          splitLine: { show: true },
+          nameTextStyle: { color: axisText },
+          axisLabel: { color: axisText },
+          axisLine: { lineStyle: { color: axisLine } },
+          splitLine: { show: true, lineStyle: { color: splitLine } },
         },
         yAxis: {
           type: 'value',
@@ -375,7 +397,10 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           name: 'Energy',
           nameLocation: 'middle',
           nameGap: 34,
-          splitLine: { show: true },
+          nameTextStyle: { color: axisText },
+          axisLabel: { color: axisText },
+          axisLine: { lineStyle: { color: axisLine } },
+          splitLine: { show: true, lineStyle: { color: splitLine } },
         },
 
         grid: { left: 60, right: 20, top: 70, bottom: 60 },
@@ -438,7 +463,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
             label: {
               show: true,
               formatter: (p: any) => p.data.label,
-              color: 'rgba(255,255,255,0.65)',
+              color: axisText,
               fontSize: 11,
               fontWeight: 600,
             },
@@ -471,12 +496,26 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
     const artists = sorted.map(([a]) => a);
     const values = sorted.map(([, c]) => c);
 
+    const axisText = '#cbd5e1';
+    const axisLine = 'rgba(148,163,184,0.35)';
+    const splitLine = 'rgba(148,163,184,0.25)';
+
     chart.setOption(
       {
-        title: { text: 'Top Artists in These Results' },
+        title: { text: 'Top Artists in These Results', textStyle: { color: axisText } },
         tooltip: { trigger: 'axis' },
-        xAxis: { type: 'value' },
-        yAxis: { type: 'category', data: artists },
+        xAxis: {
+          type: 'value',
+          axisLabel: { color: axisText },
+          axisLine: { lineStyle: { color: axisLine } },
+          splitLine: { lineStyle: { color: splitLine } },
+        },
+        yAxis: {
+          type: 'category',
+          data: artists,
+          axisLabel: { color: axisText, fontSize: 12, fontWeight: 600 },
+          axisLine: { lineStyle: { color: axisLine } },
+        },
         series: [{ type: 'bar', data: values }],
         grid: { left: 140, right: 20, top: 60, bottom: 30 },
       },
@@ -936,12 +975,9 @@ function KPI({
   suffix?: string;
   delta?: number | null;
 }) {
-  const deltaLabel =
-    delta === null || delta === undefined
-      ? null
-      : delta > 0
-        ? `+${delta}`
-        : String(delta);
+  const hasDelta = delta !== null && delta !== undefined;
+  const deltaValue = delta ?? 0;
+  const deltaLabel = hasDelta ? (deltaValue > 0 ? `+${deltaValue}` : String(deltaValue)) : null;
 
   return (
     <div className="rounded-xl border border-dark-highlight bg-dark-elevated p-3">
@@ -950,9 +986,9 @@ function KPI({
         {value}
         <span className="text-xs text-text-secondary ml-1">{suffix}</span>
       </div>
-      {deltaLabel && (
+      {hasDelta && (
         <div className="mt-1 text-xs text-text-secondary">
-          {delta > 0 ? '^' : delta < 0 ? 'v' : '-'} {deltaLabel}
+          {deltaValue > 0 ? '^' : deltaValue < 0 ? 'v' : '-'} {deltaLabel}
         </div>
       )}
     </div>

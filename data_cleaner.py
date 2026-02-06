@@ -196,14 +196,15 @@ class SpotifyDataCleaner:
 
         # Step 1: Remove duplicates using ROW_NUMBER (only if keys exist)
         if {"track_id", "track_name", artist_col}.issubset(set(raw_cols)):
+            order_col = "popularity" if "popularity" in raw_cols else "track_id"
             query = f"""
-        INSERT INTO cleaned_songs (col_list)
-        SELECT col_list
+        INSERT INTO cleaned_songs ({col_list})
+        SELECT {col_list}
         FROM (
-            SELECT col_list,
+            SELECT {col_list},
                 ROW_NUMBER() OVER (
-                    PARTITION BY track_id, track_name, artist
-                    ORDER BY popularity DESC
+                    PARTITION BY track_id, track_name, "{artist_col}"
+                    ORDER BY "{order_col}" DESC
                 ) AS rn
             FROM raw_songs
         )
