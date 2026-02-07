@@ -3,15 +3,12 @@ VibeMap CLI Application
 Interactive terminal menu for song recommendations and mood clustering.
 """
 
-import sys
 import pandas as pd
 from pathlib import Path
 
-# Ensure src/ is importable
-sys.path.insert(0, str(Path(__file__).parent))
-
-from src.recommender import SongRecommender
-from src.clustering import MoodClusterer
+# Import modules from project root (NO src/ package needed)
+from recommender import SongRecommender
+from clustering import MoodClusterer
 
 # ---------------------------------------------------------------------------
 # ANSI color helpers
@@ -60,7 +57,7 @@ def print_table(df, columns=None, index_label='#'):
 # ---------------------------------------------------------------------------
 
 def get_choice(prompt_text, valid_range):
-    """Prompt for a numeric choice within valid_range. Returns int or None."""
+    """Prompt for a numeric choice within valid_range. Returns int."""
     while True:
         try:
             raw = input(prompt_text).strip()
@@ -105,10 +102,12 @@ def get_number(prompt_text, default=5):
 
 def load_data():
     """Load CSV, initialize SongRecommender and MoodClusterer. Returns (rec, clusterer)."""
-    data_path = Path(__file__).parent / 'cleaned_spotify_data.csv'
+    project_root = Path(__file__).resolve().parent
+    data_path = project_root / 'cleaned_spotify_data.csv'
+
     if not data_path.exists():
         print(color(f"  Data file not found: {data_path}", 'red'))
-        sys.exit(1)
+        raise FileNotFoundError(f"Missing data file: {data_path}")
 
     df = pd.read_csv(data_path)
 
@@ -116,7 +115,7 @@ def load_data():
     if 'id' in df.columns and 'track_id' not in df.columns:
         df = df.rename(columns={'id': 'track_id'})
 
-    # --- SongRecommender setup (mirrors src/recommender.py:main) ---
+    # --- SongRecommender setup (mirrors recommender.py behavior) ---
     rec = SongRecommender(n_recommendations=10)
     rec.df = df.copy()
 
@@ -125,16 +124,24 @@ def load_data():
         'acousticness', 'instrumentalness', 'liveness',
         'speechiness', 'loudness',
     ]
+
+    missing = [c for c in rec.feature_names if c not in rec.df.columns]
+    if missing:
+        raise ValueError(f"Dataset is missing required columns: {missing}")
+
     rec.df = rec.df.dropna(subset=rec.feature_names).reset_index(drop=True)
 
-    # Normalize tempo and loudness to 0-1 range
+    # Avoid divide-by-zero for constant columns
+    tempo_range = rec.df['tempo'].max() - rec.df['tempo'].min()
+    loud_range = rec.df['loudness'].max() - rec.df['loudness'].min()
+
     rec.df['tempo_normalized'] = (
-        (rec.df['tempo'] - rec.df['tempo'].min()) /
-        (rec.df['tempo'].max() - rec.df['tempo'].min())
+        (rec.df['tempo'] - rec.df['tempo'].min()) / tempo_range
+        if tempo_range != 0 else 0.0
     )
     rec.df['loudness_normalized'] = (
-        (rec.df['loudness'] - rec.df['loudness'].min()) /
-        (rec.df['loudness'].max() - rec.df['loudness'].min())
+        (rec.df['loudness'] - rec.df['loudness'].min()) / loud_range
+        if loud_range != 0 else 0.0
     )
 
     feature_cols = [
@@ -142,9 +149,13 @@ def load_data():
         'acousticness', 'instrumentalness', 'liveness',
         'speechiness', 'loudness_normalized',
     ]
+
     rec.feature_matrix = rec.df[feature_cols].values
     rec.feature_matrix_scaled = rec.scaler.fit_transform(rec.feature_matrix)
-    rec.build_knn_model(n_neighbors=min(10, len(rec.df) - 1))
+
+    # If dataset is tiny, ensure at least 1 neighbor
+    n_neighbors = 1 if len(rec.df) <= 2 else min(10, len(rec.df) - 1)
+    rec.build_knn_model(n_neighbors=n_neighbors)
 
     # --- MoodClusterer setup ---
     clusterer = MoodClusterer(n_clusters=5, random_state=42)
@@ -163,7 +174,7 @@ def recommend_by_mood(rec):
         print(f"  {i}. {m.capitalize()}")
     choice = get_choice(color("\n  Pick a mood: ", 'magenta'), range(1, len(moods) + 1))
     mood = moods[choice - 1]
-    n = get_number(color(f"  How many songs? [5]: ", 'magenta'))
+    n = get_number(color("  How many songs? [5]: ", 'magenta'))
     results = rec.recommend_by_mood(mood, n_songs=n)
     print(color(f"\n  {mood.capitalize()} songs ({len(results)} results):", 'green'))
     print_table(results, ['track_name', 'artist', 'valence', 'energy', 'danceability', 'tempo'])
@@ -177,7 +188,7 @@ def recommend_by_tempo(rec):
         print(f"  {i}. {t.capitalize()} ({descriptions.get(t, '')})")
     choice = get_choice(color("\n  Pick a tempo: ", 'magenta'), range(1, len(tempos) + 1))
     tempo = tempos[choice - 1]
-    n = get_number(color(f"  How many songs? [5]: ", 'magenta'))
+    n = get_number(color("  How many songs? [5]: ", 'magenta'))
     results = rec.recommend_by_tempo(tempo, n_songs=n)
     print(color(f"\n  {tempo.capitalize()} songs ({len(results)} results):", 'green'))
     print_table(results, ['track_name', 'artist', 'valence', 'energy', 'danceability', 'tempo'])
@@ -201,7 +212,7 @@ def recommend_by_mood_and_tempo(rec):
     tempo_choice = get_choice(color("\n  Pick a tempo: ", 'magenta'), range(1, len(tempos) + 1))
     tempo = tempos[tempo_choice - 1]
 
-    n = get_number(color(f"  How many songs? [5]: ", 'magenta'))
+    n = get_number(color("  How many songs? [5]: ", 'magenta'))
     results = rec.recommend_by_mood_and_tempo(mood, tempo, n_songs=n)
     print(color(f"\n  {mood.capitalize()} + {tempo.capitalize()} songs ({len(results)} results):", 'green'))
     print_table(results, ['track_name', 'artist', 'valence', 'energy', 'danceability', 'tempo'])
@@ -223,10 +234,9 @@ def recommend_by_song(rec):
         print(color(f"  No songs found matching '{query}'.", 'yellow'))
         return
 
-    display_cols = ['track_name', 'artist']
     shown = matches.head(20)
     print(color(f"\n  Found {len(matches)} match(es). Showing top {len(shown)}:", 'green'))
-    print_table(shown, display_cols)
+    print_table(shown, ['track_name', 'artist'])
 
     pick = get_choice(color(f"\n  Pick a song number (1-{len(shown)}): ", 'magenta'), range(1, len(shown) + 1))
     song_row = shown.iloc[pick - 1]
@@ -234,7 +244,6 @@ def recommend_by_song(rec):
 
     print(f"\n  Seed: {color(song_row['track_name'], 'magenta')} by {song_row['artist']}")
 
-    # Choose similarity method
     methods = ['knn', 'cosine', 'euclidean']
     print("\n  Similarity method:")
     for i, m in enumerate(methods, 1):
@@ -306,7 +315,6 @@ def view_clusters(rec, clusterer):
     print_header("Mood Clusters")
     print("  Fitting clusters on the dataset...")
 
-    # Fit clusterer (suppress matplotlib by switching backend)
     import matplotlib
     orig_backend = matplotlib.get_backend()
     matplotlib.use('Agg')
@@ -315,10 +323,8 @@ def view_clusters(rec, clusterer):
 
     matplotlib.use(orig_backend)
 
-    # Interpret and label clusters
     clusterer.analyze_clusters(df_clustered)
 
-    # Build summary table
     rows = []
     for cid in sorted(df_clustered['cluster'].unique()):
         label = clusterer.cluster_labels.get(cid, f'Cluster {cid}')
@@ -336,7 +342,6 @@ def view_clusters(rec, clusterer):
     print(color("\n  Cluster Summary:", 'green'))
     print_table(summary, list(summary.columns))
 
-    # Sample songs per cluster
     print(color("\n  Sample songs per cluster:", 'green'))
     for cid in sorted(df_clustered['cluster'].unique()):
         label = clusterer.cluster_labels.get(cid, f'Cluster {cid}')

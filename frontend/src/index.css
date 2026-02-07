@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -44,21 +42,30 @@
   }
   body {
     @apply bg-dark-base text-text-primary;
-    font-family: 'DM Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Crimson Text', Georgia, serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 }
 
-@layer utilities {
-  .font-serif {
-    font-family: 'Crimson Text', Georgia, serif;
+@layer components {
+  .fancy-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.7) rgba(15, 23, 42, 0.6);
   }
-  .font-mono {
-    font-family: 'Roboto Mono', 'SF Mono', monospace;
+  .fancy-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
   }
-  .font-sans {
-    font-family: 'DM Sans', 'Inter', -apple-system, sans-serif;
+  .fancy-scrollbar::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+  }
+  .fancy-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.9), rgba(56, 189, 248, 0.9));
+    border-radius: 999px;
+    border: 2px solid rgba(15, 23, 42, 0.6);
+  }
+  .fancy-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(129, 140, 248, 1), rgba(56, 189, 248, 1));
   }
 }
