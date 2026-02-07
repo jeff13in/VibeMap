@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Music } from 'lucide-react';
+import vibemapLogo from '@/assets/vibemaap.png';
 import { Button } from '@/components/ui/button';
 
 const Header = () => {
@@ -9,7 +9,12 @@ const Header = () => {
     <header className="sticky top-0 z-50 w-full border-b border-dark-highlight bg-dark-elevated/95 backdrop-blur supports-[backdrop-filter]:bg-dark-elevated/60">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center space-x-2">
-          <Music className="h-6 w-6 text-spotify-green" />
+          <div
+            className="h-14 w-14 bg-contain bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${vibemapLogo})` }}
+            role="img"
+            aria-label="VibeMap"
+          />
           <span className="text-xl font-bold">VibeMap</span>
         </Link>
 
