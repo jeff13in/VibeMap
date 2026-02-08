@@ -15,12 +15,33 @@ DB_PATH = BASE_DIR / "spotify_data.db"
 CSV_PATH = BASE_DIR / "songs_with_audio_features.csv"  # (not used in this script, but kept)
 
 
+ALLOWED_TABLES = {"raw_songs", "cleaned_songs"}
+
+
 class SpotifyDataCleaner:
     """SQL-based data cleaning for Spotify dataset"""
 
     def __init__(self, db_path=DB_PATH):
         self.db_path = db_path
         self.conn = None
+
+    @staticmethod
+    def _validate_table_name(table_name: str) -> str:
+        """Validate table name against allowlist to prevent SQL injection."""
+        if table_name not in ALLOWED_TABLES:
+            raise ValueError(
+                f"Invalid table name: '{table_name}'. "
+                f"Allowed tables: {ALLOWED_TABLES}"
+            )
+        return table_name
+
+    @staticmethod
+    def _validate_column_name(col_name: str) -> str:
+        """Validate that a column name contains only safe characters."""
+        import re
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', col_name):
+            raise ValueError(f"Invalid column name: '{col_name}'")
+        return col_name
 
     def __enter__(self):
         self.conn = sqlite3.connect(self.db_path)
@@ -61,6 +82,7 @@ class SpotifyDataCleaner:
 
     def get_table_columns(self, table_name="raw_songs"):
         """Return a list of column names for a table."""
+        self._validate_table_name(table_name)
         rows = self.execute_query(f"PRAGMA table_info({table_name});")
         if not rows:
             return []
@@ -68,6 +90,7 @@ class SpotifyDataCleaner:
 
     def resolve_artist_column(self, table_name="raw_songs"):
         """Find the correct artist column name (handles artist_name vs artists etc.)."""
+        self._validate_table_name(table_name)
         cols = self.get_table_columns(table_name)
         if not cols:
             raise RuntimeError(f"Could not read columns for table: {table_name}")
@@ -93,12 +116,13 @@ class SpotifyDataCleaner:
 
     def ensure_table_exists(self, table_name="raw_songs"):
         """Fail early if the table doesn't exist."""
-        q = f"""
-        SELECT name
-        FROM sqlite_master
-        WHERE type='table' AND name='{table_name}';
-        """
-        r = self.execute_query(q)
+        self._validate_table_name(table_name)
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
+            (table_name,),
+        )
+        r = cursor.fetchall()
         if not r:
             raise RuntimeError(
                 f"Table '{table_name}' not found in DB. "
@@ -106,6 +130,7 @@ class SpotifyDataCleaner:
             )
 
     def table_row_count(self, table_name):
+        self._validate_table_name(table_name)
         r = self.execute_query(f"SELECT COUNT(*) FROM {table_name};")
         return r[0][0] if r else 0
 

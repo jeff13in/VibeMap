@@ -215,8 +215,11 @@ class SongRecommender:
 
     @classmethod
     def load_model(cls, filename='song_recommender.pkl'):
-        """Load a recommender model from disk."""
-        model_path = MODEL_DIR / filename
+        """Load a recommender model from the trusted MODEL_DIR directory."""
+        safe_name = Path(filename).name
+        model_path = (MODEL_DIR / safe_name).resolve()
+        if not model_path.is_relative_to(MODEL_DIR.resolve()):
+            raise ValueError("Invalid model filename")
         model_data = joblib.load(model_path)
         rec = cls(n_recommendations=model_data['n_recommendations'])
         rec.scaler = model_data['scaler']

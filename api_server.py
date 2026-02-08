@@ -8,6 +8,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -26,7 +27,32 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from recommender import SongRecommender  # noqa: E402
 
 app = Flask(__name__)
-CORS(app)
+
+# Security: restrict CORS to allowed origins
+ALLOWED_ORIGINS = os.environ.get(
+    "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
+).split(",")
+CORS(app, origins=ALLOWED_ORIGINS)
+
+MAX_COUNT = 100
+MAX_SEARCH_LIMIT = 50
+
+
+# ---------------------------------------------------------------------------
+# Security headers
+# ---------------------------------------------------------------------------
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+def _clamp(value: int, lo: int, hi: int) -> int:
+    return max(lo, min(value, hi))
+
 
 # ---------------------------------------------------------------------------
 # Data loading from SQLite database
@@ -89,7 +115,7 @@ def init_recommender() -> SongRecommender:
 
 
 rec = init_recommender()
-print(f"✅ API Server initialized: {len(rec.df)} songs loaded from {DB_PATH.name}")
+print(f"API Server initialized: {len(rec.df)} songs loaded from {DB_PATH.name}")
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +173,7 @@ def get_tempos():
 @app.route("/api/recommendations/mood")
 def recommend_by_mood():
     mood = request.args.get("mood")
-    count = request.args.get("count", 10, type=int)
+    count = _clamp(request.args.get("count", 10, type=int), 1, MAX_COUNT)
 
     if not mood:
         return jsonify({"success": False, "error": "Missing 'mood' parameter"}), 400
@@ -169,7 +195,7 @@ def recommend_by_mood():
 @app.route("/api/recommendations/tempo")
 def recommend_by_tempo():
     tempo = request.args.get("tempo")
-    count = request.args.get("count", 10, type=int)
+    count = _clamp(request.args.get("count", 10, type=int), 1, MAX_COUNT)
 
     if not tempo:
         return jsonify({"success": False, "error": "Missing 'tempo' parameter"}), 400
@@ -192,7 +218,7 @@ def recommend_by_tempo():
 def recommend_combined():
     mood = request.args.get("mood")
     tempo = request.args.get("tempo")
-    count = request.args.get("count", 10, type=int)
+    count = _clamp(request.args.get("count", 10, type=int), 1, MAX_COUNT)
 
     if not mood or not tempo:
         return jsonify({"success": False, "error": "Missing 'mood' and/or 'tempo' parameter"}), 400
@@ -214,21 +240,17 @@ def recommend_combined():
 def recommend_similar():
     song_id = request.args.get("song_id")
     method = request.args.get("method", "knn")
-    count = request.args.get("count", 10, type=int)
+    count = _clamp(request.args.get("count", 10, type=int), 1, MAX_COUNT)
 
     if not song_id:
         return jsonify({"success": False, "error": "Missing 'song_id' parameter"}), 400
     if method not in ("knn", "cosine", "euclidean"):
         return jsonify({"success": False, "error": f"Unknown method: '{method}'"}), 400
 
-    old_n = rec.n_recommendations
-    rec.n_recommendations = count
     try:
-        results = rec.recommend_by_song(song_id, method=method)
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 404
-    finally:
-        rec.n_recommendations = old_n
+        results = rec.recommend_by_song(song_id, method=method, n_results=count)
+    except ValueError:
+        return jsonify({"success": False, "error": "Song not found"}), 404
 
     return jsonify({
         "success": True,
@@ -241,14 +263,14 @@ def recommend_similar():
 @app.route("/api/songs/search")
 def search_songs():
     query = request.args.get("query", "")
-    limit = request.args.get("limit", 20, type=int)
+    limit = _clamp(request.args.get("limit", 20, type=int), 1, MAX_SEARCH_LIMIT)
 
     if not query:
         return jsonify({"success": False, "error": "Missing 'query' parameter"}), 400
 
     mask = (
-        rec.df["track_name"].str.contains(query, case=False, na=False)
-        | rec.df["artist"].str.contains(query, case=False, na=False)
+        rec.df["track_name"].str.contains(query, case=False, na=False, regex=False)
+        | rec.df["artist"].str.contains(query, case=False, na=False, regex=False)
     )
     results = rec.df[mask].head(limit)
 
@@ -264,10 +286,11 @@ def search_songs():
 def get_song(track_id: str):
     match = rec.df[rec.df["track_id"] == track_id]
     if match.empty:
-        return jsonify({"success": False, "error": f"Song '{track_id}' not found"}), 404
+        return jsonify({"success": False, "error": "Song not found"}), 404
 
     return jsonify({"success": True, "song": df_to_songs(match.head(1))[0]})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="127.0.0.1", port=8000, debug=debug)

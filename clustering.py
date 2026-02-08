@@ -355,8 +355,11 @@ class MoodClusterer:
     
     @classmethod
     def load_model(cls, filename='mood_clusterer.pkl'):
-        """Load trained model"""
-        model_path = MODEL_DIR / filename
+        """Load trained model from the trusted MODEL_DIR directory."""
+        safe_name = Path(filename).name
+        model_path = (MODEL_DIR / safe_name).resolve()
+        if not model_path.is_relative_to(MODEL_DIR.resolve()):
+            raise ValueError("Invalid model filename")
         model_data = joblib.load(model_path)
         
         clusterer = cls(n_clusters=model_data['n_clusters'])

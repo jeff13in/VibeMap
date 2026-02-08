@@ -160,7 +160,9 @@ class SongRecommender:
         tempo_mask = self._apply_tempo_filter(tempo)
         return self.df[mood_mask & tempo_mask].head(n_songs)
 
-    def recommend_by_song(self, song_id: str, method: str = "knn") -> pd.DataFrame:
+    def recommend_by_song(
+        self, song_id: str, method: str = "knn", n_results: int | None = None
+    ) -> pd.DataFrame:
         """Find similar songs using the specified method.
 
         Args:
@@ -169,11 +171,15 @@ class SongRecommender:
                 'knn'       - K-Nearest Neighbors with cosine distance
                 'cosine'    - sklearn pairwise cosine similarity
                 'euclidean' - scipy spatial euclidean distance
+            n_results: number of results to return (defaults to self.n_recommendations)
 
         Returns:
-            DataFrame (<= n_recommendations rows) with a similarity_score
+            DataFrame (<= n_results rows) with a similarity_score
             column normalized to [0, 1].
         """
+        if n_results is None:
+            n_results = self.n_recommendations
+
         if self.df is None or self.feature_matrix_scaled is None:
             raise ValueError("Model not ready. Ensure df and feature_matrix_scaled are set.")
         if method == "knn" and self.knn_model is None:
@@ -197,7 +203,7 @@ class SongRecommender:
         elif method == "cosine":
             sim_vector = cosine_similarity(song_vector, self.feature_matrix_scaled)[0]
             sim_vector[idx] = -1  # exclude self
-            top_indices = np.argsort(sim_vector)[::-1][: self.n_recommendations]
+            top_indices = np.argsort(sim_vector)[::-1][: n_results]
             result = self.df.iloc[top_indices].copy()
             # cosine similarity is already in [-1, 1]; normalize to [0, 1]
             result["similarity_score"] = (sim_vector[top_indices] + 1) / 2
@@ -205,7 +211,7 @@ class SongRecommender:
         elif method == "euclidean":
             dist_vector = cdist(song_vector, self.feature_matrix_scaled, metric="euclidean")[0]
             dist_vector[idx] = np.inf  # exclude self
-            top_indices = np.argsort(dist_vector)[: self.n_recommendations]
+            top_indices = np.argsort(dist_vector)[: n_results]
             top_distances = dist_vector[top_indices]
             result = self.df.iloc[top_indices].copy()
             max_dist = top_distances.max() if top_distances.max() > 0 else 1
@@ -214,7 +220,7 @@ class SongRecommender:
         else:
             raise ValueError(f"Unknown method: '{method}'. Use 'knn', 'cosine', or 'euclidean'.")
 
-        return result.head(self.n_recommendations)
+        return result.head(n_results)
 
     # ------------------------------------------------------------------
     # Model persistence
@@ -233,8 +239,17 @@ class SongRecommender:
 
     @classmethod
     def load_model(cls, filename: str = "song_recommender.pkl") -> "SongRecommender":
-        """Load a recommender model from disk."""
-        model_path = MODEL_DIR / filename
+        """Load a recommender model from disk.
+
+        Only loads from the trusted MODEL_DIR directory. The filename is
+        validated to prevent path traversal attacks.
+        """
+        # Prevent path traversal
+        safe_name = Path(filename).name
+        model_path = (MODEL_DIR / safe_name).resolve()
+        if not model_path.is_relative_to(MODEL_DIR.resolve()):
+            raise ValueError("Invalid model filename")
+
         model_data = joblib.load(model_path)
         rec = cls(n_recommendations=model_data["n_recommendations"])
         rec.scaler = model_data["scaler"]

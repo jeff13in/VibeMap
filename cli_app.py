@@ -226,8 +226,8 @@ def recommend_by_song(rec):
         return
 
     mask = (
-        rec.df['track_name'].str.contains(query, case=False, na=False) |
-        rec.df['artist'].str.contains(query, case=False, na=False)
+        rec.df['track_name'].str.contains(query, case=False, na=False, regex=False) |
+        rec.df['artist'].str.contains(query, case=False, na=False, regex=False)
     )
     matches = rec.df[mask]
     if matches.empty:
@@ -264,8 +264,8 @@ def search_songs(rec):
         return
 
     mask = (
-        rec.df['track_name'].str.contains(query, case=False, na=False) |
-        rec.df['artist'].str.contains(query, case=False, na=False)
+        rec.df['track_name'].str.contains(query, case=False, na=False, regex=False) |
+        rec.df['artist'].str.contains(query, case=False, na=False, regex=False)
     )
     matches = rec.df[mask]
     if matches.empty:
