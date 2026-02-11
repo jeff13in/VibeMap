@@ -27,7 +27,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from recommender import SongRecommender  # noqa: E402
 
 app = Flask(__name__)
-CORS(app, origins=os.environ.get("CORS_ORIGINS", "*").split(","))
+
+cors_origins = os.environ.get("CORS_ORIGINS", "")
+if cors_origins:
+    CORS(app, origins=cors_origins.split(","))
+else:
+    CORS(app, resources={r"/*": {"origins": "*"}})
 
 # ---------------------------------------------------------------------------
 # Data loading from SQLite database
