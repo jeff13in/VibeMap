@@ -11,12 +11,10 @@ import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Path setup – make root modules (data_cleaner, recommender, clustering)
-# and src/ modules importable from any test file.
+# Path setup – make backend modules (data_cleaner, recommender, clustering)
+# importable from any test file.
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-# Root first (has data_cleaner.py etc.), src/ as fallback
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
 sys.path.insert(0, str(PROJECT_ROOT))
 
 

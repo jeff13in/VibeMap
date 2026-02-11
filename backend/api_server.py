@@ -8,6 +8,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -26,7 +27,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from recommender import SongRecommender  # noqa: E402
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=os.environ.get("CORS_ORIGINS", "*").split(","))
 
 # ---------------------------------------------------------------------------
 # Data loading from SQLite database
@@ -270,4 +271,5 @@ def get_song(track_id: str):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=True)
