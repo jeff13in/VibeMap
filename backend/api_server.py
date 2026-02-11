@@ -130,6 +130,7 @@ def df_to_songs(df: pd.DataFrame) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+@app.route("/")
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy", "songs_loaded": len(rec.df)})
