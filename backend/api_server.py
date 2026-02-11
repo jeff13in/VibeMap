@@ -28,11 +28,11 @@ from recommender import SongRecommender  # noqa: E402
 
 app = Flask(__name__)
 
-# Security: restrict CORS to allowed origins
-ALLOWED_ORIGINS = os.environ.get(
-    "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
-).split(",")
-CORS(app, origins=ALLOWED_ORIGINS)
+cors_origins = os.environ.get("CORS_ORIGINS", "")
+if cors_origins:
+    CORS(app, origins=cors_origins.split(","))
+else:
+    CORS(app, resources={r"/*": {"origins": "*"}})
 
 MAX_COUNT = 100
 MAX_SEARCH_LIMIT = 50
@@ -52,7 +52,6 @@ def set_security_headers(response):
 
 def _clamp(value: int, lo: int, hi: int) -> int:
     return max(lo, min(value, hi))
-
 
 # ---------------------------------------------------------------------------
 # Data loading from SQLite database
@@ -155,6 +154,7 @@ def df_to_songs(df: pd.DataFrame) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+@app.route("/")
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy", "songs_loaded": len(rec.df)})
@@ -292,5 +292,5 @@ def get_song(track_id: str):
 
 
 if __name__ == "__main__":
-    debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-    app.run(host="127.0.0.1", port=8000, debug=debug)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port, debug=True)
