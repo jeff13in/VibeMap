@@ -28,11 +28,9 @@ from recommender import SongRecommender  # noqa: E402
 
 app = Flask(__name__)
 
-cors_origins = os.environ.get("CORS_ORIGINS", "")
-if cors_origins:
-    CORS(app, origins=cors_origins.split(","))
-else:
-    CORS(app, resources={r"/*": {"origins": "*"}})
+DEFAULT_ORIGINS = "http://localhost:5173,http://localhost:3000"
+cors_origins = os.environ.get("CORS_ORIGINS", DEFAULT_ORIGINS).split(",")
+CORS(app, origins=[o.strip() for o in cors_origins])
 
 MAX_COUNT = 100
 MAX_SEARCH_LIMIT = 50
@@ -48,6 +46,11 @@ def set_security_headers(response):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
+
+
+@app.errorhandler(Exception)
+def handle_exception(_e):
+    return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
 def _clamp(value: int, lo: int, hi: int) -> int:
@@ -268,6 +271,7 @@ def search_songs():
     if not query:
         return jsonify({"success": False, "error": "Missing 'query' parameter"}), 400
 
+    query = query[:200]
     mask = (
         rec.df["track_name"].str.contains(query, case=False, na=False, regex=False)
         | rec.df["artist"].str.contains(query, case=False, na=False, regex=False)
@@ -293,4 +297,5 @@ def get_song(track_id: str):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug)

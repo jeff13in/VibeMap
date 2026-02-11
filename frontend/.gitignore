@@ -1,0 +1,23 @@
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+!.env.example
+
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+dist-ssr
+*.local
+
+# OS / IDE
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.swp
+*.swo
