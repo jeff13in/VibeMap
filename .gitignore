@@ -11,20 +11,18 @@ venv/
 .venv/
 __pycache__/
 *.pyc
+.coverage
+.pytest_cache/
 
 # OS / IDE
 .DS_Store
 .vscode/
 .idea/
 
-# Build outputs (optional)
+# Build outputs
 dist/
 build/
 frontend/dist/
 
-# Local databases / large generated data (optional)
-*.db
-*.sqlite
-*.sqlite3
-*.csv
-notebooks/figures/
+# Notebook figures
+backend/notebooks/figures/
