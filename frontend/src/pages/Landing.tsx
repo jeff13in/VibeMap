@@ -532,8 +532,8 @@ const CTASection = ({ onGetStarted }: { onGetStarted: () => void }) => {
           Start discovering songs that match exactly how you feel. It's free, instant, and powered by ML.
         </p>
         <Button
-          variant="secondary"
-          className="bg-white text-spotify-green hover:bg-gray-100"
+          variant="primary"
+          className="bg-white text-spotify-white hover:bg-gray\-100"
           onClick={onGetStarted}
         >
           Get Started Now
