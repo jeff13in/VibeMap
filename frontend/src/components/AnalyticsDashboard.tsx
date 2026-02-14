@@ -75,6 +75,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
   const [moodFilter, setMoodFilter] = useState<'negative' | 'neutral' | 'positive' | ''>('');
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [viewportTick, setViewportTick] = useState(0);
   const prevStatsRef = useRef<{
     count: number;
     uniqueArtists: number;
@@ -325,11 +326,40 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       tempoChartRef.current?.resize();
       moodChartRef.current?.resize();
       artistChartRef.current?.resize();
+      setViewportTick((v) => v + 1);
     };
     window.addEventListener('resize', onResize);
 
+    const observed: Element[] = [];
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        onResize();
+      });
+      if (tempoRef.current) {
+        resizeObserver.observe(tempoRef.current);
+        observed.push(tempoRef.current);
+      }
+      if (moodRef.current) {
+        resizeObserver.observe(moodRef.current);
+        observed.push(moodRef.current);
+      }
+      if (artistRef.current) {
+        resizeObserver.observe(artistRef.current);
+        observed.push(artistRef.current);
+      }
+    }
+
+    // Ensure charts resize after initial layout settles (tabs/cards/fonts).
+    const rafId = window.requestAnimationFrame(onResize);
+
     return () => {
       window.removeEventListener('resize', onResize);
+      if (resizeObserver) {
+        observed.forEach((el) => resizeObserver?.unobserve(el));
+        resizeObserver.disconnect();
+      }
+      window.cancelAnimationFrame(rafId);
       tempoChartRef.current?.dispose();
       moodChartRef.current?.dispose();
       artistChartRef.current?.dispose();
@@ -343,6 +373,8 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
   useEffect(() => {
     const chart = tempoChartRef.current;
     if (!chart) return;
+    const width = tempoRef.current?.clientWidth ?? window.innerWidth;
+    const compact = width < 420;
 
     const tempos = normalized.map((s) => s.tempo).filter((x): x is number => x !== null);
     const { labels, counts } = buildTempoBins(tempos, 10);
@@ -353,32 +385,44 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
 
     chart.setOption(
       {
-        title: { text: 'Tempo Distribution (BPM)', textStyle: { color: axisText } },
+        title: {
+          text: 'Tempo Distribution (BPM)',
+          textStyle: { color: axisText, fontSize: compact ? 16 : 22, fontWeight: 700 },
+        },
         tooltip: { trigger: 'axis' },
         xAxis: {
           type: 'category',
           data: labels,
-          axisLabel: { rotate: 35, color: axisText },
+          axisLabel: { rotate: compact ? 22 : 35, color: axisText, fontSize: compact ? 10 : 12 },
           axisLine: { lineStyle: { color: axisLine } },
           axisTick: { lineStyle: { color: axisLine } },
         },
         yAxis: {
           type: 'value',
-          axisLabel: { color: axisText },
+          axisLabel: { color: axisText, fontSize: compact ? 10 : 12 },
           axisLine: { lineStyle: { color: axisLine } },
           splitLine: { lineStyle: { color: splitLine } },
         },
         series: [{ type: 'bar', data: counts }],
-        grid: { left: 40, right: 20, top: 60, bottom: 60 },
+        grid: {
+          left: compact ? 34 : 40,
+          right: compact ? 10 : 14,
+          top: compact ? 54 : 60,
+          bottom: compact ? 46 : 60,
+          containLabel: true,
+        },
       },
       { notMerge: true }
     );
-  }, [normalized]);
+    chart.resize();
+  }, [normalized, viewportTick]);
 
   // Valence vs Energy scatter update
   useEffect(() => {
     const chart = moodChartRef.current;
     if (!chart) return;
+    const width = moodRef.current?.clientWidth ?? window.innerWidth;
+    const compact = width < 420;
 
     const points = normalized
       .map((s) => {
@@ -396,7 +440,10 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
 
     chart.setOption(
       {
-        title: { text: 'Mood Space (Valence vs Energy)', textStyle: { color: axisText } },
+        title: {
+          text: 'Mood Space (Valence vs Energy)',
+          textStyle: { color: axisText, fontSize: compact ? 16 : 22, fontWeight: 700 },
+        },
         tooltip: {
           formatter: (p: any) =>
             `${p.data.name}<br/>Valence: ${p.value[0]}<br/>Energy: ${p.value[1]}`,
@@ -408,9 +455,9 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           max: 1,
           name: 'Valence',
           nameLocation: 'middle',
-          nameGap: 28,
-          nameTextStyle: { color: axisText },
-          axisLabel: { color: axisText },
+          nameGap: compact ? 22 : 28,
+          nameTextStyle: { color: axisText, fontSize: compact ? 10 : 12 },
+          axisLabel: { color: axisText, fontSize: compact ? 10 : 12 },
           axisLine: { lineStyle: { color: axisLine } },
           splitLine: { show: true, lineStyle: { color: splitLine } },
         },
@@ -420,14 +467,20 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           max: 1,
           name: 'Energy',
           nameLocation: 'middle',
-          nameGap: 34,
-          nameTextStyle: { color: axisText },
-          axisLabel: { color: axisText },
+          nameGap: compact ? 24 : 34,
+          nameTextStyle: { color: axisText, fontSize: compact ? 10 : 12 },
+          axisLabel: { color: axisText, fontSize: compact ? 10 : 12 },
           axisLine: { lineStyle: { color: axisLine } },
           splitLine: { show: true, lineStyle: { color: splitLine } },
         },
 
-        grid: { left: 60, right: 20, top: 70, bottom: 60 },
+        grid: {
+          left: compact ? 38 : 60,
+          right: compact ? 10 : 14,
+          top: compact ? 58 : 70,
+          bottom: compact ? 42 : 60,
+          containLabel: true,
+        },
 
         series: [
           {
@@ -488,7 +541,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
               show: true,
               formatter: (p: any) => p.data.label,
               color: axisText,
-              fontSize: 11,
+              fontSize: compact ? 9 : 11,
               fontWeight: 600,
             },
             tooltip: { show: false },
@@ -498,13 +551,16 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       },
       { notMerge: true }
     );
+    chart.resize();
 
-  }, [normalized]);
+  }, [normalized, viewportTick]);
 
   // Top artists update
   useEffect(() => {
     const chart = artistChartRef.current;
     if (!chart) return;
+    const width = artistRef.current?.clientWidth ?? window.innerWidth;
+    const compact = width < 420;
 
     const counts = new Map<string, number>();
     for (const s of normalized) {
@@ -526,26 +582,42 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
 
     chart.setOption(
       {
-        title: { text: 'Top Artists in These Results', textStyle: { color: axisText } },
+        title: {
+          text: 'Top Artists in These Results',
+          textStyle: { color: axisText, fontSize: compact ? 16 : 22, fontWeight: 700 },
+        },
         tooltip: { trigger: 'axis' },
         xAxis: {
           type: 'value',
-          axisLabel: { color: axisText },
+          axisLabel: { color: axisText, fontSize: compact ? 10 : 12 },
           axisLine: { lineStyle: { color: axisLine } },
           splitLine: { lineStyle: { color: splitLine } },
         },
         yAxis: {
           type: 'category',
           data: artists,
-          axisLabel: { color: axisText, fontSize: 12, fontWeight: 600 },
+          axisLabel: {
+            color: axisText,
+            fontSize: compact ? 10 : 12,
+            fontWeight: 600,
+            width: compact ? 74 : 120,
+            overflow: 'truncate',
+          },
           axisLine: { lineStyle: { color: axisLine } },
         },
         series: [{ type: 'bar', data: values }],
-        grid: { left: 140, right: 20, top: 60, bottom: 30 },
+        grid: {
+          left: compact ? 82 : 140,
+          right: compact ? 10 : 14,
+          top: compact ? 54 : 60,
+          bottom: compact ? 26 : 30,
+          containLabel: true,
+        },
       },
       { notMerge: true }
     );
-  }, [normalized]);
+    chart.resize();
+  }, [normalized, viewportTick]);
   const distInsights = useMemo(() => {
     const n = normalized.length;
     if (!n) {
@@ -626,12 +698,12 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
   }, [normalized]);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid w-full max-w-full min-w-0 gap-4 overflow-x-clip">
       {/* =========================
           HEADER
       ========================== */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full bg-spotify-green" />
             <h2 className="text-xl font-semibold">Live Analytics</h2>
@@ -641,7 +713,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-start gap-2 md:w-auto md:items-center md:justify-end">
           <span className="rounded-full border border-dark-highlight bg-dark-elevated px-3 py-1 text-xs text-text-secondary">
             Songs: {stats.count}
           </span>
@@ -655,13 +727,13 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           <div className="w-px self-stretch bg-dark-highlight mx-1 hidden sm:block" />
 
           <button
-            className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition"
+            className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs text-white/90 hover:border-spotify-green transition"
             onClick={handleExportPng}
           >
             Export PNG
           </button>
           <button
-            className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs hover:border-spotify-green transition"
+            className="rounded-lg border border-dark-highlight bg-dark-elevated px-3 py-1.5 text-xs text-white/90 hover:border-spotify-green transition"
             onClick={handleExportCsv}
           >
             Download CSV
@@ -672,7 +744,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       {/* =========================
           KPI GRID
       ========================== */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <KPI title="Songs Returned" value={stats.count} delta={deltas?.count ?? null} />
         <KPI title="Unique Artists" value={stats.uniqueArtists} delta={deltas?.uniqueArtists ?? null} />
         <KPI title="Avg Tempo" value={stats.avgTempo ?? '--'} suffix=" BPM" delta={deltas?.avgTempo ?? null} />
@@ -687,9 +759,9 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
             {/* =========================
           DISTRIBUTION INSIGHTS
       ========================== */}
-      <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+      <div className="min-w-0 rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold">Distribution Insights</h3>
             <p className="text-xs text-text-secondary">
               Quick breakdown of this recommendation set
@@ -729,9 +801,9 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       {/* =========================
           INSIGHT SUMMARY
       ========================== */}
-      <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+      <div className="min-w-0 rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold">Recommendation Profile</h3>
             <p className="text-xs text-text-secondary">
               Quick summary based on current recommendation set
@@ -759,35 +831,35 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       {/* =========================
           CHART GRID
       ========================== */}
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-        <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
-          <div className="flex items-center justify-between mb-2">
+      <div className="grid min-w-0 gap-4 grid-cols-1 lg:grid-cols-2">
+        <div className="min-w-0 rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
             <h3 className="text-sm font-semibold">Tempo Distribution</h3>
-            <span className="text-xs text-text-secondary">BPM bins</span>
+            <span className="text-xs text-text-secondary text-right">BPM bins</span>
           </div>
-          <div className="h-[340px]">
-            <div ref={tempoRef} className="h-full w-full" />
+          <div className="h-[220px] min-w-0 overflow-hidden sm:h-[320px] md:h-[340px]">
+            <div ref={tempoRef} className="h-full w-full min-w-0" />
           </div>
         </div>
 
-        <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
-          <div className="flex items-center justify-between mb-2">
+        <div className="min-w-0 rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
             <h3 className="text-sm font-semibold">Mood Space</h3>
-            <span className="text-xs text-text-secondary">Valence vs Energy</span>
+            <span className="text-xs text-text-secondary text-right">Valence vs Energy</span>
           </div>
-          <div className="h-[340px]">
-            <div ref={moodRef} className="h-full w-full" />
+          <div className="h-[220px] min-w-0 overflow-hidden sm:h-[320px] md:h-[340px]">
+            <div ref={moodRef} className="h-full w-full min-w-0" />
           </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
-        <div className="flex items-center justify-between mb-2">
+      <div className="min-w-0 rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
           <h3 className="text-sm font-semibold">Top Artists</h3>
-          <span className="text-xs text-text-secondary">Most frequent in result set</span>
+          <span className="text-xs text-text-secondary text-right">Most frequent in result set</span>
         </div>
-        <div className="h-[320px]">
-          <div ref={artistRef} className="h-full w-full" />
+        <div className="h-[220px] min-w-0 overflow-hidden sm:h-[300px] md:h-[320px]">
+          <div ref={artistRef} className="h-full w-full min-w-0" />
         </div>
       </div>
 
@@ -795,8 +867,8 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           EXPLAINABILITY
       ========================== */}
       <details className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
-        <summary className="cursor-pointer list-none flex items-center justify-between">
-          <div>
+        <summary className="cursor-pointer list-none flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold">Why these songs?</h3>
             <p className="text-xs text-text-secondary">
               Explainability notes (simple but powerful)
@@ -822,19 +894,19 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
       {/* =========================
           TABLE PREVIEW
       ========================== */}
-      <div className="rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
+      <div className="min-w-0 rounded-2xl border border-dark-highlight bg-dark-elevated p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
           <h3 className="text-sm font-semibold">Result Preview</h3>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
             <input
-              className="h-9 w-52 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm outline-none focus:border-spotify-green"
+              className="h-10 w-full rounded-lg border border-dark-highlight bg-black/20 px-3 text-base outline-none focus:border-spotify-green sm:col-span-2 sm:text-sm lg:h-9 lg:w-52"
               placeholder="Search track/artist..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <select
-              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm outline-none focus:border-spotify-green"
+              className="h-10 w-full rounded-lg border border-dark-highlight bg-black/20 px-3 text-base outline-none focus:border-spotify-green sm:text-sm lg:h-9 lg:w-auto"
               value={sortBy}
               onChange={(e) =>
                 setSortBy(
@@ -856,19 +928,19 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
               <option value="valence">Valence</option>
             </select>
             <button
-              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-xs text-text-secondary hover:border-spotify-green transition"
+              className="h-10 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm text-white/90 hover:border-spotify-green transition lg:h-9 lg:text-xs"
               onClick={() => setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
             >
               {sortDir === 'asc' ? 'Asc' : 'Desc'}
             </button>
             <button
-              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-xs text-text-secondary hover:border-spotify-green transition"
+              className="h-10 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm text-white/90 hover:border-spotify-green transition lg:h-9 lg:text-xs"
               onClick={handleExportPreview}
             >
               Export Preview
             </button>
             <button
-              className={`h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm transition ${
+              className={`h-10 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm text-white/90 transition lg:h-9 ${
                 outliersOnly ? 'border-spotify-green text-spotify-green' : 'hover:border-spotify-green'
               }`}
               onClick={() => setOutliersOnly((prev) => !prev)}
@@ -879,7 +951,7 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
               (i)
             </span>
             <button
-              className="h-9 rounded-lg border border-dark-highlight bg-black/20 px-3 text-xs text-text-secondary hover:border-spotify-green transition"
+              className="h-10 rounded-lg border border-dark-highlight bg-black/20 px-3 text-sm text-white/90 hover:border-spotify-green transition lg:h-9 lg:text-xs"
               onClick={() => {
                 setSearch('');
                 setSortBy('');
@@ -941,14 +1013,14 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
           ))}
         </div>
 
-        <div className="max-h-[520px] overflow-y-auto overflow-x-auto fancy-scrollbar">
-          <table className="w-full border-collapse text-sm">
+        <div className="fancy-scrollbar max-w-full max-h-[520px] overflow-y-auto overflow-x-auto">
+          <table className="w-full min-w-[680px] border-collapse text-sm">
             <thead>
               <tr>
                 {['track_name', 'artist_name', 'tempo', 'valence', 'energy'].map((h) => (
                   <th
                     key={h}
-                    className="text-left p-2 border-b border-dark-highlight text-xs text-text-secondary uppercase tracking-wide cursor-pointer select-none"
+                    className="text-left p-2 border-b border-dark-highlight text-xs text-text-secondary uppercase tracking-wide cursor-pointer select-none whitespace-nowrap"
                     onClick={() =>
                       handleSort(
                         h as 'track_name' | 'artist_name' | 'tempo' | 'valence' | 'energy'
@@ -971,11 +1043,11 @@ const AnalyticsDashboard: FC<Props> = ({ songs = [] }) => {
             <tbody>
               {tableRows.map((s, i) => (
                 <tr key={s.track_id ?? `${s.track_name}-${s.artist_name}-${i}`}>
-                  <td className="p-2 border-b border-dark-highlight">{s.track_name}</td>
-                  <td className="p-2 border-b border-dark-highlight">{s.artist_name}</td>
-                  <td className="p-2 border-b border-dark-highlight">{s.tempo ?? '—'}</td>
-                  <td className="p-2 border-b border-dark-highlight">{s.valence ?? '—'}</td>
-                  <td className="p-2 border-b border-dark-highlight">{s.energy ?? '—'}</td>
+                  <td className="p-2 border-b border-dark-highlight align-top max-w-[220px]">{s.track_name}</td>
+                  <td className="p-2 border-b border-dark-highlight align-top max-w-[220px]">{s.artist_name}</td>
+                  <td className="p-2 border-b border-dark-highlight align-top whitespace-nowrap">{s.tempo ?? '—'}</td>
+                  <td className="p-2 border-b border-dark-highlight align-top whitespace-nowrap">{s.valence ?? '—'}</td>
+                  <td className="p-2 border-b border-dark-highlight align-top whitespace-nowrap">{s.energy ?? '—'}</td>
                 </tr>
               ))}
 
