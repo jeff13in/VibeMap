@@ -79,9 +79,9 @@ const Recommendations = () => {
   }, [recommendations]);
 
   return (
-    <div className="container py-8">
+    <div className="container overflow-x-hidden py-6 sm:py-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">Discover Music</h1>
+        <h1 className="mb-2 text-3xl font-bold sm:text-4xl">Discover Music</h1>
         <p className="text-text-secondary">
           Find your next favorite song with AI-powered recommendations
         </p>
@@ -96,8 +96,8 @@ const Recommendations = () => {
 
         {/* Mood Tab */}
         <TabsContent value="mood" className="space-y-6">
-          <Card className="bg-dark-elevated border-dark-highlight">
-            <CardContent className="pt-6">
+          <Card className="bg-dark-elevated border-dark-highlight overflow-hidden">
+            <CardContent className="pt-6 min-w-0 overflow-x-hidden">
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Select a Mood</h3>
@@ -296,10 +296,10 @@ const Recommendations = () => {
           {/* Dynamic Analytics Dashboard (based on current recommendations) */}
           <Card className="bg-dark-elevated border-dark-highlight">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
                 <BarChart3 className="h-5 w-5 text-spotify-green" />
-                <h3 className="text-xl font-semibold">Live Analytics</h3>
-                <span className="text-text-secondary text-sm">
+                <h3 className="text-lg sm:text-xl font-semibold">Live Analytics</h3>
+                <span className="hidden text-text-secondary text-sm sm:inline">
                   (updates every time you generate recommendations)
                 </span>
               </div>

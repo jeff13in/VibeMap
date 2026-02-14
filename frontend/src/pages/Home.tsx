@@ -158,7 +158,7 @@ const Home = () => {
           <Button
             size="lg"
             variant="secondary"
-            className="bg-white text-spotify-green hover:bg-gray-100 text-lg px-8"
+            className="bg-white text-black hover:bg-gray-100 text-lg px-8"
             onClick={() => navigate('/recommendations')}
           >
             Get Started Now

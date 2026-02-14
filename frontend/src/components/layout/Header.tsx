@@ -8,9 +8,9 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-dark-highlight bg-dark-elevated/95 backdrop-blur supports-[backdrop-filter]:bg-dark-elevated/60">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center -space-x-2">
+        <Link to="/" className="flex min-w-0 items-center -space-x-2">
           <div
-            className="h-36 w-36 bg-contain bg-center bg-no-repeat"
+            className="h-10 w-10 bg-contain bg-center bg-no-repeat sm:h-36 sm:w-36"
             style={{ backgroundImage: `url(${vibemapLogo})` }}
             role="img"
             aria-label="VibeMap"
@@ -18,7 +18,7 @@ const Header = () => {
           <span className="text-xl font-bold">VibeMap</span>
         </Link>
 
-        <nav className="flex items-center space-x-6">
+        <nav className="flex items-center gap-3 sm:space-x-6">
           <Link
             to="/"
             className={`text-sm font-medium transition-colors hover:text-spotify-green ${
@@ -35,11 +35,12 @@ const Header = () => {
                 : 'text-text-secondary'
             }`}
           >
-            Recommendations
+            <span className="sm:hidden">Recommendations</span>
+            <span className="hidden sm:inline">Recommendations</span>
           </Link>
           <Button
             variant="default"
-            className="bg-spotify-green hover:bg-spotify-green-dark"
+            className="hidden bg-spotify-green hover:bg-spotify-green-dark sm:inline-flex"
             asChild
           >
             <Link to="/recommendations">Get Started</Link>
