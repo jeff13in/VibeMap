@@ -388,7 +388,7 @@ Set in Vercel Dashboard > Project > Settings > Environment Variables:
 | Live Analytics Dashboard (ECharts) | Done |
 | Security Hardening | Done |
 | Vercel Deployment (frontend) | Done |
-| Backend Deployment (Render/Railway) | Not started |
+| Backend Deployment (Render) | Done |
 | Spotify API Integration | Not started |
 | CI/CD Pipeline | Not started |
 | Docker Deployment | Not started |
